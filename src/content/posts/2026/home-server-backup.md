@@ -2,7 +2,7 @@
 title: "How to auto-backup a home-server"
 pubDatetime: 2026-11-27T18:30:00
 featured: false
-draft: true
+draft: false
 tags:
   - self-hosting
 # ogImage: ../../assets/images/example.png # src/assets/images/example.png
@@ -11,22 +11,22 @@ description: Covers PostgreSQL, SQLite and media volumes.
 
 Seemingly every self-hosting guide stresses the importance of backups, but leaves out how to actually do it. In fact, it doesn't even seem like there is a community-wide solution for backups in the same way that everyone has rallied behind services like Immich for photos and Plex/Jellyfin for entertainment. It's not always as simple as just copy-pasting the volumes your containers have mounted; SQLite can very easily corrupt if copied while in use, and PostgreSQL's raw data isn't really portable between machines. Some services have their own integrated backup features, but it's hit or miss. I'd like to share what I've found to be the most low-friction way of backing up all data on my home server, including active PostgreSQL and SQLite databases. By the end, you'll have:
 
-- Portable backups for PostgreSQL, SQLite and other cold data mounted by your docker services.
+- Portable backups for PostgreSQL, SQLite, and other cold data mounted by your Docker services.
 - One web dashboard for all backup routines.
 - 3-2-1 compliance, storing the data locally and/or on cloud storage.
-- Guarranteed safety from database corruption.
+- Guaranteed safety from database corruption.
 - Full coverage of *every* container in your stack.
 
 We'll achieve this by hosting a backup solution named Backrest, which offers a single web GUI for all your backups. For this guide, I'm assuming that:
-- You're using docker compose for your home server. I use Docker, but Podman should also be fine.
-- You have a variable named `${DATA}` which points to a directory where *all* of your containers store their persistent data (e.g. `${DATA}/jellyfin:/config` for Jellyfin).
+- You're using Docker Compose for your home server. I use Docker, but Podman should also be fine.
+- You have a variable named `${DATA}` which points to a directory where *all* of your containers store their persistent data (e.g., `${DATA}/jellyfin:/config` for Jellyfin).
 
-## Pre-Requesite: Move everything to PostgreSQL
-If a service supports PostgreSQL, and you have it set up for SQLite or MariaDB instead, I'd strongly reccomend you migrate it to PostgreSQL. Specifically, you want everything to be connected to the *same* PostgreSQL container with a different database, username and password for each service. This will save a *lot* of syustem resources compared to having one PostgreSQL for each service, and this guide assumes you've used this approach later on. 
+## Prerequisite: Move everything to PostgreSQL
+If a service supports PostgreSQL, and you have it set up for SQLite or MariaDB instead, I'd strongly recommend you migrate it to PostgreSQL. Specifically, you want everything to be connected to the *same* PostgreSQL container with a different database, username, and password for each service. This will save a *lot* of system resources compared to having one PostgreSQL container for each service, and this guide assumes you've used this approach later on. 
 
-Having a centralised database server rather than fragmented SQLite files means they can be backed-up easily without being shut down. While MariaDB *could* also work for this use case, plenty of popular services like Immich, Miniflux and Linkwarden *only* support PostgreSQL, making it easier to standardise on if you run one of them.
+Having a centralised database server rather than fragmented SQLite files means they can be backed up easily without being shut down. While MariaDB *could* also work for this use case, plenty of popular services like Immich, Miniflux, and Linkwarden *only* support PostgreSQL, making it easier to standardise on if you run one of them.
 
-In my example, I'm using the `tensorchord/vchord-postgres` image rather than the standard `postgres` image. It contains the `pgvector` and `vectorchord` extensions my Immich instance needs; make sure you database has all the extensions it needs too.
+In my example, I'm using the `tensorchord/vchord-postgres` image rather than the standard `postgres` image. It contains the `pgvector` and `vectorchord` extensions my Immich instance needs; make sure your database has all the extensions it needs too.
 
 ```yml
 services:
@@ -52,7 +52,7 @@ services:
 ```
 
 ## Labelling SQLite-based services
-For those services that only support SQLite, like Audiobookshelf, we'll need a way for our backup pipeline to know that it's using SQLite. The simplest way is to give it a label, in the `labels` block, explicitly marking it to be shutdown before a backup to avoid database corruption. I use the label `docker-volume-backup.stop-during-backup: "true"`, which is though you could change this if you wanted.
+For those services that only support SQLite, like Audiobookshelf, we'll need a way for our backup pipeline to know that it's using SQLite. The simplest way is to give it a label in the `labels` block, explicitly marking it to be shut down before a backup to avoid database corruption. I use the label `docker-volume-backup.stop-during-backup: "true"`, which is a common convention, though you could change this if you wanted.
 
 ```yml
 services: 
@@ -72,9 +72,9 @@ services:
 ```
 
 ## Configure Backrest
-Backrest is the most set-it-and-forget-it solution I've found. It's a web-based interface for restic, offering scheduling, repository management, and secure file restoration. Restic, the tool it is uses under the hood, is capable of de-duplicating data across different timed snapshots. If your first PostgreSQL snapshot is 160MB, and your second is 163MB with 5MB changed, the backup repository should only use 165MB total for the two. Restic also compresses data wherever possible, and my PostgreSQL dump only took up around ~80MB down from ~160MB when I first ran it. I won't be giving a full tour of the Backrest UI, so check their [getting started](https://garethgeorge.github.io/backrest/introduction/getting-started) page if you want to understand the workflow a little better.
+Backrest is the most set-it-and-forget-it solution I've found. It's a web-based interface for restic, offering scheduling, repository management, and secure file restoration. Restic, the tool it uses under the hood, is capable of deduplicating data across different timed snapshots. If your first PostgreSQL snapshot is 160MB, and your second is 163MB with 5MB changed, the backup repository should only use 165MB total for the two. Restic also compresses data wherever possible—my PostgreSQL dump only took up around 80MB, down from 160MB when I first ran it. I won't be giving a full tour of the Backrest UI, so check their [getting started](https://garethgeorge.github.io/backrest/introduction/getting-started) page if you want to understand the workflow a little better.
 
-For database backups, it's crucial that your Backrest image has access to the `docker-cli` tool. The official Backrest image is built on Alpine Linux, where the tool can be added with `apk add --no-cache docker-cli`. Backrest will also then need access to your host's docker socket, either by giving it direct access or by using a socket proxy with scoped privilleges as I have in my example. This grants Backrest a lot of control over your system, so take care not to expose this to the public.
+For database backups, it's crucial that your Backrest image has access to the `docker-cli` tool. The official Backrest image is built on Alpine Linux, where the tool can be added with `apk add --no-cache docker-cli`. Backrest will also need access to your host's docker socket, either by giving it direct access or by using a socket proxy with scoped privileges as I have in my example. This grants Backrest a lot of control over your system, so take care not to expose it to the public.
 
 ```yml
 networks:
@@ -135,10 +135,11 @@ Scroll down to "Hooks" and add a `CONDITION_SNAPSHOT_START`, which will run befo
 ```sh
 docker exec postgres-shared pg_dumpall -U postgres_user --clean --if-exists -f /backups/postgres_all.sql
 ```
-Check that command works in the terminal, you may to adjust the container name, username or file path if yours are different. Press "Submit", and you should now have a backup routine for your PostgreSQL instance that can get the latest database dump before archiving it.
+Check that the command works in the terminal; you may need to adjust the container name, username, or file path if yours are different. Press "Submit", and you should now have a backup routine for your PostgreSQL instance that grabs the latest database dump before archiving it.
 
 ## Set up the Docker Volumes plan
-Add another plan called something like "Docker-Volumes". The path, for my example, should be `/volumes`. The one downside to this approach of backing up near-enough every containers data is that a lot of them will mix in large cache files with their data. Unless you want to through more storage or money at this problem, you'll probably want to take some time to look at each of your container's data and write some entries in the "Excludes" section to make sure they're ignored by Backrest. Here's an example of my ignore file, you'll definitely want to ignore PostgreSQL (because we just used a custom approach), Kavita cache (which stores decompressed manga/comics) and some Jellyfin paths:
+
+Add another plan called something like "Docker-Volumes". The path, for my example, should be `/volumes`. The one downside to this approach of backing up near-enough every container's data is that a lot of them will mix large cache files in with their persistent data. Unless you want to throw more storage or money at this problem, you'll probably want to take some time to look at each of your containers' data directories and write some entries in the "Excludes" section to make sure they're ignored by Backrest. Here's an example of my ignore list from Backrest's config.json (if pasting into the Web UI, omit the quotes and commas). You'll definitely want to ignore PostgreSQL (because we just used a custom approach), Kavita's cache (which stores decompressed manga/comics), and some Jellyfin paths:
 
 ```js
 "excludes": [
@@ -172,7 +173,8 @@ Add another plan called something like "Docker-Volumes". The path, for my exampl
   "**/cache-long"
 ],
 ```
-In the "Hooks" section, add a `CONDITION_SNAPSHOT_START`. This should stop all containers with the `docker-volume-backup.stop-during-backup=true` label, and keep a record of what containers have been stopped in the `/tmp` directory to bring them back online later.
+In the "Hooks" section, add a `CONDITION_SNAPSHOT_START` hook. This should stop all containers with the `docker-volume-backup.stop-during-backup=true` label, and keep a record of what containers have been stopped in the `/tmp` directory to bring them back online later.
+
 ```sh
 docker ps -q --filter "label=docker-volume-backup.stop-during-backup=true" > /tmp/stopped_containers.txt && \
 if [ -s /tmp/stopped_containers.txt ]; then
@@ -180,7 +182,7 @@ if [ -s /tmp/stopped_containers.txt ]; then
 fi
 ```
 
-Next, add the `CONDITION_SNAPSHOT_END` to restart the containers from that temporary log we kept.
+Next, add a `CONDITION_SNAPSHOT_END` hook to restart the containers from that temporary log we kept.
 ```sh
 if [ -s /tmp/stopped_containers.txt ]; then
   docker start $(cat /tmp/stopped_containers.txt) && rm -f /tmp/stopped_containers.txt

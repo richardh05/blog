@@ -13,7 +13,7 @@
 /* Light theme values */
 :root,
 [data-theme="light"] {
-  --background: #fdfdfd;
+  --background: #f8f9fa;
   --foreground: #282728;
   --accent: #006cac;
   --accent-foreground: #ffffff;
@@ -24,11 +24,11 @@
 
 /* Dark theme values */
 [data-theme="dark"] {
-  --background: #212737;
-  --foreground: #eaedf3;
-  --accent: #ff6b01;
-  --accent-foreground: #ffffff;
-  --muted: #343f60;
-  --muted-foreground: #afb9ca;
-  --border: #ab4b08;
+  --background: #1f1f28;
+  --foreground: #c8c093;
+  --accent: #76946a;
+  --accent-foreground: #1f1f28;
+  --muted: #2a2a37;
+  --muted-foreground: #717c7c;
+  --border: #c0a36e;
 }
